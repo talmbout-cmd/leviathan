@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "leviathan": {
+      "url": "https://leviathan.talmbout.ai/api/mcp"
+    }
+  }
+}
