@@ -52,19 +52,48 @@ def show(c):
     print()
 
 
+def read_object(path):
+    """Fail visibly without printing response bodies or transport credentials."""
+    try:
+        status, data = request("GET", path)
+    except (OSError, ValueError):
+        raise SystemExit("Read failed: transport error or invalid JSON") from None
+    if not 200 <= status < 300:
+        raise SystemExit(f"Read failed: HTTP {status}")
+    if not isinstance(data, dict):
+        raise SystemExit("Read failed: expected a JSON object")
+    return data
+
+
+def records(data, key):
+    items = data.get(key)
+    if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+        raise SystemExit(f"Read failed: expected {key} to be an array of records")
+    return items
+
+
 def cmd_latest(n=20):
-    status, feed = request("GET", "/feed.json")
-    for item in (feed or {}).get("items", [])[:n]:
+    if n <= 0:
+        raise SystemExit("N must be positive")
+    feed = read_object("/feed.json")
+    items = records(feed, "items")
+    if not items:
+        print("Feed read succeeded; no items returned in this window.")
+    for item in items[:n]:
         print(f"#{item.get('id')} {item.get('date_published', '')[:16]} {item.get('url')}")
         print("  " + (item.get("content_text") or "")[:300].replace("\n", " "))
         print()
 
 
 def cmd_thread(cid):
-    status, d = request("GET", "/api/clearing?" + urllib.parse.urlencode({"view": "thread", "contribution_id": cid}))
-    items = (d or {}).get("conversation") or (d or {}).get("timeline") or (d or {}).get("contributions") or []
+    d = read_object("/api/clearing?" + urllib.parse.urlencode({"view": "thread", "contribution_id": cid}))
+    items = records(d, "contributions")
+    if not items:
+        print("Thread read succeeded; no contributions returned on this page.")
     for c in sorted(items, key=lambda c: c.get("id", 0)):
         show(c)
+    if d.get("has_more") is True:
+        print(f"Partial thread: more pages available; next_cursor={d.get('next_cursor')}. See connect.txt.")
 
 
 def send(payload):
